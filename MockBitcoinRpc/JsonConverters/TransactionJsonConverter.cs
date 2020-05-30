@@ -6,7 +6,13 @@ namespace MockBitcoinRpc.JsonConverters
 {
 	public class TransactionJsonConverter : JsonConverter
 	{
-		 
+		private Network network;
+
+		public TransactionJsonConverter(Network network)
+		{
+			this.network = network;
+		}
+
 		public override bool CanConvert(Type objectType)
 		{
 			return objectType == typeof(Transaction);
@@ -16,7 +22,7 @@ namespace MockBitcoinRpc.JsonConverters
 		public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
 		{
 			var txHex = reader.Value.ToString();
-			var tx = Transaction.Parse(txHex, Network.Main);
+			var tx = Transaction.Parse(txHex, network);
 			return tx;
 		}
 
