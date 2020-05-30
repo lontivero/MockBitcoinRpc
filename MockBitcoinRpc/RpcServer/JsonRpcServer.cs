@@ -32,6 +32,7 @@ namespace MockBitcoinRpc
 
 		public override async Task StartAsync(CancellationToken cancellationToken)
 		{
+			Logger.Info("RPC Server starting.");
 			Listener.Start();
 			await base.StartAsync(cancellationToken).ConfigureAwait(false);
 		}
@@ -40,6 +41,7 @@ namespace MockBitcoinRpc
 		{
 			await base.StopAsync(cancellationToken).ConfigureAwait(false);
 			Listener.Stop();
+			Logger.Info("RPC Server stopped.");
 		}
 
 		protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -58,6 +60,7 @@ namespace MockBitcoinRpc
 					{
 						using var reader = new StreamReader(request.InputStream);
 						string body = await reader.ReadToEndAsync().ConfigureAwait(false);
+						Logger.Verbose("Request: {0}", body);
 
 						var identity = (HttpListenerBasicIdentity)context.User?.Identity;
 						if (!Config.RequiresCredentials || CheckValidCredentials(identity))
@@ -72,15 +75,18 @@ namespace MockBitcoinRpc
 								var buffer = Encoding.UTF8.GetBytes(result);
 								await output.WriteAsync(buffer, 0, buffer.Length, stoppingToken).ConfigureAwait(false);
 								await output.FlushAsync(stoppingToken).ConfigureAwait(false);
+								Logger.Verbose("Response: {0}", result);
 							}
 						}
 						else
 						{
+							Logger.Verbose("Unauthorized request.");
 							response.StatusCode = (int)HttpStatusCode.Unauthorized;
 						}
 					}
 					else
 					{
+						Logger.Verbose($"Request: {request.HttpMethod} method is not allowed." );
 						response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
 					}
 					response.Close();
