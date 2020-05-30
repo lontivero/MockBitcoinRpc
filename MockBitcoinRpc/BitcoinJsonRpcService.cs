@@ -1,14 +1,18 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
-using System.Threading.Tasks;
+using MockBitcoinRpc.Dtos;
+using MockBitcoinRpc.Logging;
 using NBitcoin;
 using NBitcoin.DataEncoders;
-using Newtonsoft.Json.Linq;
 
 namespace MockBitcoinRpc
 {
 	public class BitcoinJsonRpcService
 	{
+		private static readonly Log Logger = new Log(new TraceSource(nameof(BitcoinJsonRpcService), SourceLevels.Verbose));
+
 		private BitcoinNode _node;
 
 		public BitcoinJsonRpcService(BitcoinNode node)
@@ -196,19 +200,41 @@ namespace MockBitcoinRpc
 			return tx.GetHash();
 		}
 
-		[JsonRpcMethod("signrawtransaction")]
-		public Transaction SignRawTransaction(Transaction tx)
-		{
-			return _node.SignRawTransaction(tx);
-		}
 
 		[JsonRpcMethod("createrawtransaction")]
-		public Transaction CreateRawTransaction(string inputs, string outputs, uint locktime = 0xffffffff, bool rbf = false)
+		public Transaction CreateRawTransaction(InputDto[] inputs, Dictionary<string, string> outputs, uint locktime = 0xffffffff, bool rbf = false)
 		{
-			var inputsJson = JArray.Parse(inputs);
-			var outputsJson= JArray.Parse(outputs);
+			var txInputs = inputs.Select(i => new TxIn(new OutPoint(i.txid, i.vout)));
+			var txOutputs= outputs.Select(kv => kv.Key == "data"
+				? new TxOut(Money.Zero, TxNullDataTemplate.Instance.GenerateScriptPubKey(Encoders.Hex.DecodeData(kv.Value)))
+				: new TxOut(Money.Satoshis(ulong.Parse(kv.Value)), BitcoinAddress.Create(kv.Key, BitcoinNode.Network)));
+			var tx = BitcoinNode.Network.CreateTransaction();
 
-			return BitcoinNode.Network.CreateTransaction(); //_node.CreateRawTransaction();
+			tx.Inputs.AddRange(txInputs);
+			tx.Outputs.AddRange(txOutputs);
+			tx.LockTime = locktime;
+
+			if (rbf)
+			{
+				foreach(var txin in tx.Inputs)
+				{
+					txin.Sequence = Sequence.MAX_BIP125_RBF_SEQUENCE;
+				}
+			}
+			return tx;
+		}
+
+		[JsonRpcMethod("signrawtransactionwithkey")]
+		public Transaction SignRawTransactionWithKey(Transaction tx, Key[] privatekeys)
+		{
+		//	return _node.SignRawTransactionWithKey(tx, privatekeys);
+			return tx;
+		}
+
+		[JsonRpcMethod("dumpprivkey")]
+		public Key DumpPrivateKey(BitcoinAddress address)
+		{
+			return _node.DumpPrivateKey(address);
 		}
 
 		[JsonRpcMethod("generate")]

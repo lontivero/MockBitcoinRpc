@@ -106,9 +106,20 @@ namespace MockBitcoinRpc
 			AddTransaction(tx);
 		}
 
-		public Transaction SignRawTransaction(Transaction tx)
+		public Key DumpPrivateKey(BitcoinAddress address)
 		{
-			return tx;
+			for(var i = 0u; i < 100; i++)
+			{
+				var pk = _extPubKey.Derive(i).GetPublicKey();
+				if (pk.GetAddress(ScriptPubKeyType.Legacy, Network) == address ||
+					pk.GetAddress(ScriptPubKeyType.Segwit, Network) == address ||
+					pk.GetAddress(ScriptPubKeyType.SegwitP2SH, Network) == address)
+					{
+						return _extKey.Derive(i).PrivateKey;
+					}
+			}
+
+			throw new NotFoundException("Address");
 		}
 
 		public uint256[] Generate(int nblocks, BitcoinAddress minerAddress)
