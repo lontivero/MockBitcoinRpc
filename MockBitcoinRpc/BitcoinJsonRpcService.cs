@@ -224,6 +224,13 @@ namespace MockBitcoinRpc
 			return tx;
 		}
 
+
+		[JsonRpcMethod("listunspent")]
+		public IEnumerable<UtxoDto> ListUnspentUtxo(int minconf = 0, int maxconf = int.MaxValue)
+		{
+			return _node.GetUnspentUtxo(minconf, maxconf);
+		}
+
 		[JsonRpcMethod("signrawtransactionwithkey")]
 		public Transaction SignRawTransactionWithKey(Transaction tx, Key[] privatekeys)
 		{

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using MockBitcoinRpc.Dtos;
 using NBitcoin;
 
 namespace MockBitcoinRpc
@@ -16,6 +17,9 @@ namespace MockBitcoinRpc
 		private List<Transaction> _mempool;
 		private Dictionary<uint256, Block> _blockIndex;
 		private Dictionary<uint256, Transaction> _txIndex;
+		private Dictionary<Transaction, Block> _txBlock;
+		private Dictionary<OutPoint, TxOut> _utxos;
+		private Dictionary<Script, PubKey> _scriptKeyMap;
 		public static Network Network { get; private set; }
 
 		public BitcoinNode(Network network, RandomWithSeed rnd)
@@ -34,6 +38,9 @@ namespace MockBitcoinRpc
 			_blockIndex = new Dictionary<uint256, Block>();
 			_mempool = new List<Transaction>();
 			_txIndex = new Dictionary<uint256, Transaction>();
+			_txBlock = new Dictionary<Transaction, Block>();
+			_utxos = new Dictionary<OutPoint, TxOut>();
+			_scriptKeyMap = new Dictionary<Script, PubKey>();
 
 			var genesisBlock = network.GetGenesis();
 			AddBlock(genesisBlock);
@@ -41,7 +48,10 @@ namespace MockBitcoinRpc
 
 		public BitcoinAddress GetNewAddress()
 		{
-			return _extPubKey.Derive(_keyDepth++).GetPublicKey().GetAddress(ScriptPubKeyType.Segwit, Network);
+			var publickKey = _extPubKey.Derive(_keyDepth++).GetPublicKey();
+			var address = publickKey.GetAddress(ScriptPubKeyType.Segwit, Network);
+			_scriptKeyMap.Add(address.ScriptPubKey, publickKey);
+			return  address;
 		}
 
 		public Block GetBestBlock()
@@ -104,6 +114,39 @@ namespace MockBitcoinRpc
 		public void SendRawTransaction(Transaction tx, bool allowhighfees)
 		{
 			AddTransaction(tx);
+		}
+
+		public List<UtxoDto> GetUnspentUtxo(int minconf, int maxconf)
+		{
+			var utxos = new List<UtxoDto>();
+			foreach(var kv in _utxos)
+			{
+				var (outpoint, txout) = (kv.Key, kv.Value);
+				var scriptPubKey = txout.ScriptPubKey;
+
+				if ( _scriptKeyMap.ContainsKey(scriptPubKey))
+				{
+					var tx = _txIndex[outpoint.Hash];
+					var confirmations = 0u;
+					if (_txBlock.TryGetValue(tx, out var block))
+					{
+						confirmations = GetHeightOfBlock(block);
+					}
+					utxos.Add(new UtxoDto {
+						txid = outpoint.Hash,
+						vout = outpoint.N,
+						address = scriptPubKey.GetDestinationAddress(Network),
+						label = "hello",
+						scriptPubKey = scriptPubKey,
+						amount = txout.Value,
+						confirmations = confirmations,
+						spendable = confirmations > 100,
+						solvable = true,
+						safe = true
+					});
+				}
+			}
+			return utxos;
 		}
 
 		public Key DumpPrivateKey(BitcoinAddress address)
@@ -179,26 +222,33 @@ namespace MockBitcoinRpc
 			return tx.GetFeeRate(spendingCoins.ToArray());
 		}
 
-		private void AddTransaction(Transaction tx)
+		private void AddTransaction(Transaction tx, bool confirmed=false)
 		{
-			_mempool.Add(tx);
-			AddTransactionToIndex(tx);
+			if(!confirmed)
+			{
+				_mempool.Add(tx);
+			}
+			_txIndex.Add(tx.GetHash(), tx);
+			foreach(var txout in tx.Outputs.AsIndexedOutputs())
+			{
+				_utxos.Add(new OutPoint(tx.GetHash(), txout.N), txout.TxOut);
+			}
+			foreach(var txin in tx.Inputs.AsIndexedInputs())
+			{
+				_utxos.Remove(txin.PrevOut);
+			}
 		}
 		
-		private void AddTransactionToIndex(Transaction tx)
-		{
-			_txIndex.Add(tx.GetHash(), tx);
-		}
-
 		private void AddBlock(Block block)
 		{
 			_blocks.Add(block);
 			_blockIndex.Add(block.GetHash(), block);
-			AddTransactionToIndex(block.Transactions[0]);
+			AddTransaction(block.Transactions[0], true);
 
 			foreach(var tx in block.Transactions)
 			{
 				_mempool.Remove(tx);
+				_txBlock.Add(tx, block);
 			}
 		}
 	}

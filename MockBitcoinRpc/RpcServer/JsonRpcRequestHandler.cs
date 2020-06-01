@@ -24,6 +24,8 @@ namespace MockBitcoinRpc
 			Converters = new JsonConverter[]
 			{
 				new Uint256JsonConverter(),
+				new MoneyBtcJsonConverter(),
+				new ScriptJsonConverter(),
 				new TransactionJsonConverter(BitcoinNode.Network),
 				new KeyJsonConverter(BitcoinNode.Network),
 				new BitcoinAddressJsonConverter(BitcoinNode.Network)
